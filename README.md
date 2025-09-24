@@ -11,6 +11,12 @@
 
 </div>
 
+## DISCLAIMER
+
+⚠️ **EXPERIMENTAL LIBRARY - FOR LAB/PERSONAL USE** ⚠️
+
+This is an experimental library under active development. It is intended for research, learning, and personal projects. The API is subject to change!
+
 > High-performance structured logging library for Zig with modular architecture
 
 **zlog** is a production-ready logging library that replaces heavy C libraries like `spdlog`, `log4c`, and `rsyslog`. Built for performance and flexibility, it supports multiple output formats, async I/O, file rotation, and advanced aggregation features.
