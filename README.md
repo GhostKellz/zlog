@@ -1,6 +1,6 @@
 <div align="center">
 
-![zlog](assets/icons/zlog.png)
+<img src="assets/icons/zlog.png" alt="zlog" width="175">
 
 # zlog
 
