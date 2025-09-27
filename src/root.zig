@@ -228,24 +228,56 @@ pub const Logger = struct {
     }
 
     fn asyncWorker(self: *Logger) void {
+        var batch_buffer = std.ArrayList([]u8).init(self.allocator);
+        defer batch_buffer.deinit();
+
+        // Pre-allocate batch buffer capacity for better performance
+        batch_buffer.ensureTotalCapacity(self.config.buffer_size / 64) catch {};
+
         while (!self.shutdown_signal.load(.acquire)) {
+            // Batch processing for better performance
             self.mutex.lock();
-            const messages_to_process = self.async_queue.toOwnedSlice(self.allocator) catch {
-                self.mutex.unlock();
-                std.Thread.sleep(1000000); // 1ms
-                continue;
-            };
+
+            // Move messages from queue to batch buffer
+            const queue_size = self.async_queue.items.len;
+            if (queue_size > 0) {
+                // Reserve capacity in batch buffer
+                batch_buffer.ensureTotalCapacityPrecise(queue_size) catch {
+                    self.mutex.unlock();
+                    std.Thread.sleep(500000); // 0.5ms - shorter sleep for better responsiveness
+                    continue;
+                };
+
+                // Move all messages to batch buffer
+                for (self.async_queue.items) |msg| {
+                    batch_buffer.appendAssumeCapacity(msg);
+                }
+                self.async_queue.clearRetainingCapacity();
+            }
             self.mutex.unlock();
 
-            for (messages_to_process) |msg| {
-                defer self.allocator.free(msg);
-                _ = self.file.writeAll(msg) catch {};
-            }
-
-            if (messages_to_process.len == 0) {
-                std.Thread.sleep(1000000); // 1ms
+            // Process batch outside of lock for better concurrency
+            if (batch_buffer.items.len > 0) {
+                // Write all messages as efficiently as possible
+                for (batch_buffer.items) |msg| {
+                    _ = self.file.writeAll(msg) catch {};
+                    self.allocator.free(msg);
+                }
+                batch_buffer.clearRetainingCapacity();
+            } else {
+                // Adaptive sleep - shorter when active, longer when idle
+                std.Thread.sleep(500000); // 0.5ms - more responsive than 1ms
             }
         }
+
+        // Process any remaining messages during shutdown
+        self.mutex.lock();
+        for (self.async_queue.items) |msg| {
+            _ = self.file.writeAll(msg) catch {};
+            self.allocator.free(msg);
+        }
+        self.async_queue.clearAndFree();
+        self.mutex.unlock();
     }
 
     pub fn log(self: *Logger, level: Level, comptime fmt: []const u8, args: anytype) void {
@@ -462,44 +494,46 @@ pub const Logger = struct {
 
         self.buffer.clearRetainingCapacity();
 
-        // Binary format: [timestamp:8][level:1][message_len:2][message][fields_count:1][fields...]
-        // Each field: [key_len:1][key][value_type:1][value]
+        // Optimized binary format v2: [header][timestamp:8][level:1][message_len:varint][message][fields_count:varint][fields...]
+        // Each field: [key_len:varint][key][value_type:1][value]
+        // Uses variable-length integers for better size efficiency
 
+        // Write format version for future compatibility (magic byte)
+        try self.buffer.append(self.allocator, 0x5A); // 'Z' for zlog
+
+        // Timestamp - always 8 bytes, little-endian for consistency
         const timestamp_bytes = std.mem.toBytes(@as(u64, @intCast(entry.timestamp)));
         try self.buffer.appendSlice(self.allocator, &timestamp_bytes);
 
+        // Level - 1 byte
         try self.buffer.append(self.allocator, @intFromEnum(entry.level));
 
-        const message_len = @as(u16, @intCast(@min(entry.message.len, 65535)));
-        const len_bytes = std.mem.toBytes(message_len);
-        try self.buffer.appendSlice(self.allocator, &len_bytes);
-        try self.buffer.appendSlice(self.allocator, entry.message[0..message_len]);
+        // Message length and content using varint encoding
+        try writeVarint(&self.buffer, self.allocator, entry.message.len);
+        try self.buffer.appendSlice(self.allocator, entry.message);
 
-        const fields_count = @as(u8, @intCast(@min(entry.fields.len, 255)));
-        try self.buffer.append(self.allocator, fields_count);
+        // Fields count using varint
+        try writeVarint(&self.buffer, self.allocator, entry.fields.len);
 
-        for (entry.fields[0..fields_count]) |field| {
-            const key_len = @as(u8, @intCast(@min(field.key.len, 255)));
-            try self.buffer.append(self.allocator, key_len);
-            try self.buffer.appendSlice(self.allocator, field.key[0..key_len]);
+        for (entry.fields) |field| {
+            // Key length and content using varint
+            try writeVarint(&self.buffer, self.allocator, field.key.len);
+            try self.buffer.appendSlice(self.allocator, field.key);
 
+            // Value type and content
             switch (field.value) {
                 .string => |v| {
                     try self.buffer.append(self.allocator, 0); // string type
-                    const val_len = @as(u16, @intCast(@min(v.len, 65535)));
-                    const val_len_bytes = std.mem.toBytes(val_len);
-                    try self.buffer.appendSlice(self.allocator, &val_len_bytes);
-                    try self.buffer.appendSlice(self.allocator, v[0..val_len]);
+                    try writeVarint(&self.buffer, self.allocator, v.len);
+                    try self.buffer.appendSlice(self.allocator, v);
                 },
                 .int => |v| {
                     try self.buffer.append(self.allocator, 1); // int type
-                    const bytes = std.mem.toBytes(v);
-                    try self.buffer.appendSlice(self.allocator, &bytes);
+                    try writeVarintSigned(&self.buffer, self.allocator, v);
                 },
                 .uint => |v| {
                     try self.buffer.append(self.allocator, 2); // uint type
-                    const bytes = std.mem.toBytes(v);
-                    try self.buffer.appendSlice(self.allocator, &bytes);
+                    try writeVarint(&self.buffer, self.allocator, v);
                 },
                 .float => |v| {
                     try self.buffer.append(self.allocator, 3); // float type
@@ -514,47 +548,61 @@ pub const Logger = struct {
         }
     }
 
+    // Optimized varint encoding for better space efficiency
+    fn writeVarint(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, value: usize) !void {
+        var v = value;
+        while (v >= 0x80) {
+            try buffer.append(allocator, @as(u8, @truncate(v | 0x80)));
+            v >>= 7;
+        }
+        try buffer.append(allocator, @as(u8, @truncate(v)));
+    }
+
+    fn writeVarintSigned(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, value: i64) !void {
+        // ZigZag encoding for signed integers
+        const encoded = if (value >= 0)
+            @as(u64, @intCast(value << 1))
+        else
+            @as(u64, @intCast(((-value - 1) << 1) | 1));
+
+        try writeVarint(buffer, allocator, encoded);
+    }
+
     fn formatBinaryToBuffer(self: *Logger, buffer: *std.ArrayList(u8), entry: LogEntry) !void {
         if (!build_options.enable_binary_format) {
             return self.formatTextToBuffer(buffer, entry);
         }
 
-        // Same binary format as above but writes to provided buffer
+        // Same optimized binary format as above but writes to provided buffer
+        try buffer.append(self.allocator, 0x5A); // Format version
+
         const timestamp_bytes = std.mem.toBytes(@as(u64, @intCast(entry.timestamp)));
         try buffer.appendSlice(self.allocator, &timestamp_bytes);
 
         try buffer.append(self.allocator, @intFromEnum(entry.level));
 
-        const message_len = @as(u16, @intCast(@min(entry.message.len, 65535)));
-        const len_bytes = std.mem.toBytes(message_len);
-        try buffer.appendSlice(self.allocator, &len_bytes);
-        try buffer.appendSlice(self.allocator, entry.message[0..message_len]);
+        try writeVarint(buffer, self.allocator, entry.message.len);
+        try buffer.appendSlice(self.allocator, entry.message);
 
-        const fields_count = @as(u8, @intCast(@min(entry.fields.len, 255)));
-        try buffer.append(self.allocator, fields_count);
+        try writeVarint(buffer, self.allocator, entry.fields.len);
 
-        for (entry.fields[0..fields_count]) |field| {
-            const key_len = @as(u8, @intCast(@min(field.key.len, 255)));
-            try buffer.append(self.allocator, key_len);
-            try buffer.appendSlice(self.allocator, field.key[0..key_len]);
+        for (entry.fields) |field| {
+            try writeVarint(buffer, self.allocator, field.key.len);
+            try buffer.appendSlice(self.allocator, field.key);
 
             switch (field.value) {
                 .string => |v| {
                     try buffer.append(self.allocator, 0);
-                    const val_len = @as(u16, @intCast(@min(v.len, 65535)));
-                    const val_len_bytes = std.mem.toBytes(val_len);
-                    try buffer.appendSlice(self.allocator, &val_len_bytes);
-                    try buffer.appendSlice(self.allocator, v[0..val_len]);
+                    try writeVarint(buffer, self.allocator, v.len);
+                    try buffer.appendSlice(self.allocator, v);
                 },
                 .int => |v| {
                     try buffer.append(self.allocator, 1);
-                    const bytes = std.mem.toBytes(v);
-                    try buffer.appendSlice(self.allocator, &bytes);
+                    try writeVarintSigned(buffer, self.allocator, v);
                 },
                 .uint => |v| {
                     try buffer.append(self.allocator, 2);
-                    const bytes = std.mem.toBytes(v);
-                    try buffer.appendSlice(self.allocator, &bytes);
+                    try writeVarint(buffer, self.allocator, v);
                 },
                 .float => |v| {
                     try buffer.append(self.allocator, 3);

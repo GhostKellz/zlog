@@ -142,12 +142,103 @@ pub fn build(b: *std.Build) void {
     // A run step that will run the second test executable.
     const run_exe_tests = b.addRunArtifact(exe_tests);
 
+    // Extended test suite with comprehensive coverage
+    const unit_tests = b.addTest(.{
+        .name = "unit_tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/unit/test_runner.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = if (enable_async) &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zsync", .module = b.dependency("zsync", .{}).module("zsync") },
+                .{ .name = "zlog", .module = mod },
+            } else &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zlog", .module = mod },
+            },
+        }),
+    });
+
+    const integration_tests = b.addTest(.{
+        .name = "integration_tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/integration/test_runner.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = if (enable_async) &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zsync", .module = b.dependency("zsync", .{}).module("zsync") },
+                .{ .name = "zlog", .module = mod },
+            } else &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zlog", .module = mod },
+            },
+        }),
+    });
+
+    const benchmark_tests = b.addTest(.{
+        .name = "benchmark_tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/benchmarks/benchmark_suite.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = if (enable_async) &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zsync", .module = b.dependency("zsync", .{}).module("zsync") },
+                .{ .name = "zlog", .module = mod },
+            } else &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zlog", .module = mod },
+            },
+        }),
+    });
+
+    const platform_tests = b.addTest(.{
+        .name = "platform_tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/platform/platform_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = if (enable_async) &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zsync", .module = b.dependency("zsync", .{}).module("zsync") },
+                .{ .name = "zlog", .module = mod },
+            } else &[_]std.Build.Module.Import{
+                .{ .name = "build_options", .module = options_module },
+                .{ .name = "zlog", .module = mod },
+            },
+        }),
+    });
+
+    // Test execution steps
+    const run_unit_tests = b.addRunArtifact(unit_tests);
+    const run_integration_tests = b.addRunArtifact(integration_tests);
+    const run_benchmark_tests = b.addRunArtifact(benchmark_tests);
+    const run_platform_tests = b.addRunArtifact(platform_tests);
+
     // A top level step for running all tests. dependOn can be called multiple
     // times and since the two run steps do not depend on one another, this will
     // make the two of them run in parallel.
-    const test_step = b.step("test", "Run tests");
+    const test_step = b.step("test", "Run all tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+    test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&run_integration_tests.step);
+    test_step.dependOn(&run_platform_tests.step);
+
+    // Individual test categories
+    const unit_test_step = b.step("test:unit", "Run unit tests");
+    unit_test_step.dependOn(&run_unit_tests.step);
+
+    const integration_test_step = b.step("test:integration", "Run integration tests");
+    integration_test_step.dependOn(&run_integration_tests.step);
+
+    const benchmark_step = b.step("benchmark", "Run performance benchmarks");
+    benchmark_step.dependOn(&run_benchmark_tests.step);
+
+    const platform_test_step = b.step("test:platform", "Run platform-specific tests");
+    platform_test_step.dependOn(&run_platform_tests.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
