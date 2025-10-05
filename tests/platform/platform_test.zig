@@ -145,7 +145,7 @@ test "platform: timestamp consistency" {
     logger.info("Timestamp test start", .{});
 
     // Small delay to ensure different timestamp
-    std.time.sleep(1_000_000); // 1ms
+    std.Thread.sleep(1_000_000); // 1ms
 
     logger.info("Timestamp test end", .{});
 
@@ -219,7 +219,7 @@ test "platform: async behavior" {
         else => 20_000_000, // 20ms for Unix-like systems
     };
 
-    std.time.sleep(sleep_duration);
+    std.Thread.sleep(sleep_duration);
 
     logger.info("Async test completion on {s}", .{@tagName(builtin.os.tag)});
 }

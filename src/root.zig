@@ -3,6 +3,9 @@ const build_options = @import("build_options");
 
 const zsync = if (build_options.enable_async) @import("zsync") else void;
 
+// Import network support if enabled
+pub const network = if (build_options.enable_network_targets) @import("network.zig") else struct {};
+
 pub const Level = enum(u8) {
     debug = 0,
     info = 1,
@@ -39,11 +42,13 @@ pub const OutputTarget = enum {
     stdout,
     stderr,
     file,
+    network,
 
     pub fn isAvailable(target: OutputTarget) bool {
         return switch (target) {
             .stdout, .stderr => true, // Always available
             .file => build_options.enable_file_targets,
+            .network => build_options.enable_network_targets,
         };
     }
 };
@@ -78,6 +83,9 @@ pub const LoggerConfig = struct {
     async_io: bool = if (build_options.enable_async) false else false,
     sampling_rate: f32 = 1.0,
     buffer_size: usize = 4096,
+
+    // Network settings
+    network_config: if (build_options.enable_network_targets) ?network.NetworkConfig else ?void = null,
 
     // Aggregation settings
     enable_batching: bool = if (build_options.enable_aggregation) false else false,
@@ -137,6 +145,7 @@ pub const Logger = struct {
                 const path = config.file_path.?;
                 break :blk try std.fs.cwd().createFile(path, .{ .read = false, .truncate = false });
             } else std.fs.File.stdout(),
+            .network => std.fs.File.stdout(), // Network targets don't use a file handle
         };
 
         var logger = Logger{
@@ -147,10 +156,10 @@ pub const Logger = struct {
             .buffer = try std.ArrayList(u8).initCapacity(allocator, config.buffer_size),
             .sample_counter = std.atomic.Value(u64).init(0),
             .current_file_size = if (build_options.enable_file_targets) std.atomic.Value(usize).init(0) else {},
-            .batch_buffer = if (build_options.enable_aggregation) std.ArrayList(LogEntry).empty else {},
+            .batch_buffer = if (build_options.enable_aggregation) .{} else {},
             .last_batch_time = if (build_options.enable_aggregation) std.atomic.Value(i64).init(std.time.timestamp()) else {},
             .dedup_cache = if (build_options.enable_aggregation) std.AutoHashMap(u64, i64).init(allocator) else {},
-            .async_queue = if (build_options.enable_async) std.ArrayList([]u8).empty else {},
+            .async_queue = if (build_options.enable_async) .{} else {},
             .async_thread = if (build_options.enable_async) null else {},
             .shutdown_signal = if (build_options.enable_async) std.atomic.Value(bool).init(false) else {},
         };
@@ -228,11 +237,11 @@ pub const Logger = struct {
     }
 
     fn asyncWorker(self: *Logger) void {
-        var batch_buffer = std.ArrayList([]u8).init(self.allocator);
-        defer batch_buffer.deinit();
+        var batch_buffer: std.ArrayList([]u8) = .{};
+        defer batch_buffer.deinit(self.allocator);
 
         // Pre-allocate batch buffer capacity for better performance
-        batch_buffer.ensureTotalCapacity(self.config.buffer_size / 64) catch {};
+        batch_buffer.ensureTotalCapacity(self.allocator, self.config.buffer_size / 64) catch {};
 
         while (!self.shutdown_signal.load(.acquire)) {
             // Batch processing for better performance
@@ -242,7 +251,7 @@ pub const Logger = struct {
             const queue_size = self.async_queue.items.len;
             if (queue_size > 0) {
                 // Reserve capacity in batch buffer
-                batch_buffer.ensureTotalCapacityPrecise(queue_size) catch {
+                batch_buffer.ensureTotalCapacityPrecise(self.allocator, queue_size) catch {
                     self.mutex.unlock();
                     std.Thread.sleep(500000); // 0.5ms - shorter sleep for better responsiveness
                     continue;
@@ -276,7 +285,7 @@ pub const Logger = struct {
             _ = self.file.writeAll(msg) catch {};
             self.allocator.free(msg);
         }
-        self.async_queue.clearAndFree();
+        self.async_queue.clearAndFree(self.allocator);
         self.mutex.unlock();
     }
 
@@ -310,7 +319,7 @@ pub const Logger = struct {
 
         if (build_options.enable_async and self.config.async_io) {
             // Format message in temporary buffer
-            var temp_buffer = std.ArrayList(u8).empty;
+            var temp_buffer: std.ArrayList(u8) = .{};
             defer temp_buffer.deinit(self.allocator);
 
             switch (self.config.format) {

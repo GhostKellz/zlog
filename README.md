@@ -240,11 +240,10 @@ zlog.warn("Warning from default logger", .{});
 
 Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
-- [API Reference](docs/api.md) - Complete API documentation
-- [Configuration Guide](docs/configuration.md) - Detailed configuration options
-- [Performance Guide](docs/performance.md) - Optimization tips and benchmarks
-- [Examples](docs/examples.md) - Practical usage examples
-- [Migration Guide](docs/migration.md) - Migrating from other logging libraries
+- [API Reference](docs/API.md) - Complete API documentation
+- [Performance Guide](docs/PERFORMANCE.md) - Optimization tips and benchmarks
+- [Migration Guide](docs/MIGRATION.md) - Migrating from other logging libraries
+- [Examples](examples/) - Practical usage examples
 
 ## 🧪 Testing
 
