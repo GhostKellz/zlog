@@ -216,7 +216,6 @@ pub const ConfigValidator = struct {
     }
 
     fn validateBufferSize(self: ConfigValidator, buffer_size: usize, result: *ValidationResult) !void {
-        _ = self;
         const min_size = 256;
         const max_size = 1024 * 1024; // 1MB
         const recommended_min = 1024;
@@ -240,7 +239,6 @@ pub const ConfigValidator = struct {
     }
 
     fn validateSamplingRate(self: ConfigValidator, sampling_rate: f32, result: *ValidationResult) !void {
-        _ = self;
         if (sampling_rate < 0.0 or sampling_rate > 1.0) {
             try result.addError("sampling_rate", "Sampling rate must be between 0.0 and 1.0", .InvalidSamplingRate);
             try result.addSuggestion("sampling_rate", try std.fmt.allocPrint(self.allocator, "{d:.2}", .{sampling_rate}), "1.0", "No sampling");
@@ -273,7 +271,6 @@ pub const ConfigValidator = struct {
     }
 
     fn validateAsyncSettings(self: ConfigValidator, config: zlog.LoggerConfig, result: *ValidationResult) !void {
-        _ = self;
         if (config.async_io) {
             if (!build_options.enable_async) {
                 try result.addError("async_io", "Async I/O requested but not enabled in build", .AsyncNotEnabled);

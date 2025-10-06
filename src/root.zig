@@ -3,8 +3,11 @@ const build_options = @import("build_options");
 
 const zsync = if (build_options.enable_async) @import("zsync") else void;
 
-// Import network support if enabled
+// Public API exports for advanced features
 pub const network = if (build_options.enable_network_targets) @import("network.zig") else struct {};
+pub const configuration = @import("config.zig");
+pub const validation = @import("validation.zig");
+pub const errors = @import("errors.zig");
 
 pub const Level = enum(u8) {
     debug = 0,
@@ -96,18 +99,28 @@ pub const LoggerConfig = struct {
 
     pub fn validate(self: LoggerConfig) !void {
         if (!self.format.isAvailable()) {
+            std.debug.print("❌ zlog config error: {s} format not enabled in build\n", .{@tagName(self.format)});
+            std.debug.print("   💡 Hint: Use .text format or rebuild with -D{s}_format=true\n", .{@tagName(self.format)});
             return error.FormatNotEnabled;
         }
         if (!self.output_target.isAvailable()) {
+            std.debug.print("❌ zlog config error: {s} output target not enabled in build\n", .{@tagName(self.output_target)});
+            std.debug.print("   💡 Hint: Use .stdout/.stderr or rebuild with -D{s}_targets=true\n", .{@tagName(self.output_target)});
             return error.OutputTargetNotEnabled;
         }
         if (self.output_target == .file and self.file_path == null) {
+            std.debug.print("❌ zlog config error: file output requires file_path to be set\n", .{});
+            std.debug.print("   💡 Hint: Set .file_path = \"path/to/logfile.log\" in config\n", .{});
             return error.FilePathRequired;
         }
         if (self.async_io and !build_options.enable_async) {
+            std.debug.print("❌ zlog config error: async_io requested but not enabled in build\n", .{});
+            std.debug.print("   💡 Hint: Set .async_io = false or rebuild with -Dasync_io=true\n", .{});
             return error.AsyncNotEnabled;
         }
         if ((self.enable_batching or self.enable_deduplication) and !build_options.enable_aggregation) {
+            std.debug.print("❌ zlog config error: aggregation features requested but not enabled in build\n", .{});
+            std.debug.print("   💡 Hint: Disable batching/deduplication or rebuild with -Daggregation=true\n", .{});
             return error.AggregationNotEnabled;
         }
     }
@@ -135,6 +148,7 @@ pub const Logger = struct {
     shutdown_signal: if (build_options.enable_async) std.atomic.Value(bool) else void,
 
     pub fn init(allocator: std.mem.Allocator, config: LoggerConfig) !Logger {
+        // Validate configuration with helpful error messages
         try config.validate();
 
         // Open output file

@@ -33,6 +33,8 @@ This is an experimental library under active development. It is intended for res
 - 🔒 **Thread Safe** - Concurrent logging with mutex protection
 - 🎚️ **Log Levels** - Debug, Info, Warn, Error, Fatal with filtering
 - 📈 **Performance Metrics** - Built-in benchmarking capabilities
+- ⚙️ **Configuration Management** - JSON files, environment variables, hot-reload
+- ✅ **Advanced Validation** - Helpful error messages and auto-fixing
 
 ## 📦 Installation
 
@@ -116,6 +118,45 @@ var logger = try zlog.Logger.init(allocator, .{
 });
 
 logger.info("This logs asynchronously", .{});
+```
+
+### Configuration from JSON File
+
+```zig
+// Load configuration from JSON file
+var config_manager = try zlog.configuration.ConfigManager.init(
+    allocator,
+    "log_config.json",
+    .json,
+);
+defer config_manager.deinit();
+
+var logger = try zlog.Logger.init(allocator, config_manager.getConfig());
+defer logger.deinit();
+
+logger.info("Logger initialized from config file", .{});
+```
+
+### Environment Variables
+
+```zig
+// Start with defaults
+var config = zlog.LoggerConfig{};
+
+// Override with environment variables (ZLOG_LEVEL, ZLOG_FORMAT, etc.)
+config = zlog.configuration.loadFromEnv(config);
+
+var logger = try zlog.Logger.init(allocator, config);
+defer logger.deinit();
+```
+
+```bash
+# Configure via environment
+export ZLOG_LEVEL=debug
+export ZLOG_FORMAT=json
+export ZLOG_OUTPUT=file
+export ZLOG_FILE=/var/log/app.log
+./myapp
 ```
 
 ## 🧩 Modular Build Options

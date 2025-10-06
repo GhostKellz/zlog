@@ -7,9 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0-rc.1] - 2025-10-05
+### Planned for Beta (0.2.0)
+- Network output targets (TCP/UDP/HTTP)
+- Syslog protocol support
+- Configuration file loading
+- Enhanced metrics and monitoring
+- Hot-reload configuration
+
+## [0.1.0-alpha.1] - 2025-10-05
 
 ### Added
+- **Configuration Management**
+  - JSON configuration file loading and saving
+  - Environment variable configuration support (`ZLOG_LEVEL`, `ZLOG_FORMAT`, `ZLOG_OUTPUT`, `ZLOG_FILE`)
+  - Configuration hot-reload with callback support
+  - Advanced configuration validation with helpful error messages
+  - Automatic configuration fixing for common errors
 - Core logging functionality with 5 log levels (debug, info, warn, error, fatal)
 - Multiple output formats: text, JSON, and binary
 - Multiple output targets: stdout, stderr, and file

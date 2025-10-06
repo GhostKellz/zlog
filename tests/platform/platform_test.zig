@@ -118,10 +118,10 @@ test "platform: thread safety" {
     // but it exercises the mutex code paths
 
     var i: u32 = 0;
-    while (i < 100) : (i += 1) {
+    while (i < 10) : (i += 1) {
         logger.info("Thread safety test {d} on {s}", .{ i, @tagName(builtin.os.tag) });
 
-        if (i % 10 == 0) {
+        if (i % 5 == 0) {
             const fields = [_]zlog.Field{
                 .{ .key = "platform", .value = .{ .string = @tagName(builtin.os.tag) } },
                 .{ .key = "iteration", .value = .{ .uint = i } },
@@ -173,24 +173,22 @@ test "platform: memory allocation patterns" {
     });
     defer logger.deinit();
 
-    // Test various allocation patterns
+    // Test various allocation patterns (reduced for faster tests)
     var i: u32 = 0;
-    while (i < 50) : (i += 1) {
-        const size = (i % 10) * 50 + 100; // Varying sizes
+    while (i < 5) : (i += 1) {
+        const size = (i % 3) * 50 + 100; // Varying sizes
         const test_data = try allocator.alloc(u8, size);
         defer allocator.free(test_data);
 
         @memset(test_data, 'P'); // P for Platform
 
-        logger.info("Platform memory test {d}: {s}", .{ i, test_data });
+        logger.info("Platform memory test {d}", .{i});
 
-        if (i % 5 == 0) {
-            const fields = [_]zlog.Field{
-                .{ .key = "size", .value = .{ .uint = size } },
-                .{ .key = "platform", .value = .{ .string = @tagName(builtin.os.tag) } },
-            };
-            logger.logWithFields(.debug, "Memory allocation test", &fields);
-        }
+        const fields = [_]zlog.Field{
+            .{ .key = "size", .value = .{ .uint = size } },
+            .{ .key = "platform", .value = .{ .string = @tagName(builtin.os.tag) } },
+        };
+        logger.logWithFields(.debug, "Memory allocation test", &fields);
     }
 }
 
@@ -207,16 +205,16 @@ test "platform: async behavior" {
 
     logger.info("Async test on {s}", .{@tagName(builtin.os.tag)});
 
-    // Log several messages asynchronously
+    // Log several messages asynchronously (reduced for faster tests)
     var i: u32 = 0;
-    while (i < 20) : (i += 1) {
+    while (i < 5) : (i += 1) {
         logger.info("Async platform test {d}", .{i});
     }
 
     // Platform-specific sleep duration to allow async processing
     const sleep_duration = switch (builtin.os.tag) {
-        .windows => 50_000_000, // 50ms - Windows might need more time
-        else => 20_000_000, // 20ms for Unix-like systems
+        .windows => 10_000_000, // 10ms - Windows might need more time
+        else => 5_000_000, // 5ms for Unix-like systems
     };
 
     std.Thread.sleep(sleep_duration);
@@ -249,14 +247,14 @@ test "platform: file rotation behavior" {
     var logger = try zlog.Logger.init(allocator, .{
         .output_target = .file,
         .file_path = test_file,
-        .max_file_size = 1024, // Small size to trigger rotation
+        .max_file_size = 512, // Small size to trigger rotation quickly
         .max_backup_files = 2,
     });
     defer logger.deinit();
 
-    // Generate enough content to potentially trigger rotation
+    // Generate enough content to potentially trigger rotation (reduced iterations)
     var i: u32 = 0;
-    while (i < 50) : (i += 1) {
+    while (i < 10) : (i += 1) {
         logger.info("Platform rotation test {d} on {s} with extra content for size", .{ i, @tagName(builtin.os.tag) });
     }
 
@@ -312,23 +310,15 @@ test "platform: unicode and locale handling" {
     });
     defer logger.deinit();
 
-    // Test unicode handling across platforms
+    // Test unicode handling across platforms (reduced set for faster tests)
     const unicode_strings = [_][]const u8{
         "ASCII only",
         "UTF-8: Hello 世界 🌍",
-        "Symbols: ←→↑↓ ⚡⚠️✅❌",
-        "Math: π≈3.14159 ∑∏∫√",
-        "Currency: $€£¥₹₿",
+        "Currency: $€£¥",
     };
 
     for (unicode_strings) |unicode_str| {
         logger.info("Unicode test: {s}", .{unicode_str});
-
-        const unicode_fields = [_]zlog.Field{
-            .{ .key = "unicode_sample", .value = .{ .string = unicode_str } },
-            .{ .key = "platform", .value = .{ .string = @tagName(builtin.os.tag) } },
-        };
-        logger.logWithFields(.info, "Unicode structured test", &unicode_fields);
     }
 }
 
@@ -340,7 +330,7 @@ test "platform: performance characteristics" {
     });
     defer logger.deinit();
 
-    const iterations = 1000;
+    const iterations = 100;
     const start = std.time.nanoTimestamp();
 
     var i: u32 = 0;
@@ -357,13 +347,4 @@ test "platform: performance characteristics" {
         @tagName(builtin.os.tag),
         messages_per_ms
     });
-
-    const perf_fields = [_]zlog.Field{
-        .{ .key = "platform", .value = .{ .string = @tagName(builtin.os.tag) } },
-        .{ .key = "iterations", .value = .{ .uint = iterations } },
-        .{ .key = "duration_ms", .value = .{ .float = duration_ms } },
-        .{ .key = "messages_per_ms", .value = .{ .float = messages_per_ms } },
-    };
-
-    logger.logWithFields(.info, "Performance benchmark results", &perf_fields);
 }

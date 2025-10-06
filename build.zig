@@ -240,6 +240,13 @@ pub fn build(b: *std.Build) void {
     const platform_test_step = b.step("test:platform", "Run platform-specific tests");
     platform_test_step.dependOn(&run_platform_tests.step);
 
+    // Quick test target for rapid development (skips slow benchmarks)
+    const quick_test_step = b.step("test:quick", "Run quick tests (skip benchmarks)");
+    quick_test_step.dependOn(&run_mod_tests.step);
+    quick_test_step.dependOn(&run_exe_tests.step);
+    quick_test_step.dependOn(&run_unit_tests.step);
+    quick_test_step.dependOn(&run_integration_tests.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means
