@@ -91,7 +91,8 @@ test "error: file system errors" {
         // This may succeed in some test environments, so we don't enforce the error
         const result = zlog.Logger.init(allocator, config);
         if (result) |logger| {
-            logger.deinit();
+            var mut_logger = logger;
+            mut_logger.deinit();
             // Clean up if successful
             std.fs.cwd().deleteFile("/root/test.log") catch {};
         } else |err| {
@@ -323,7 +324,7 @@ test "error: async error handling" {
         logger.info("After file deletion", .{});
 
         // Give async thread time to encounter the error
-        std.time.sleep(10_000_000); // 10ms
+        std.Thread.sleep(10_000_000); // 10ms
     }
 }
 

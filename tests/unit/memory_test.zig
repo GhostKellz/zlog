@@ -101,7 +101,7 @@ test "memory: async io lifecycle" {
     }
 
     // Give time for async processing
-    std.time.sleep(20_000_000); // 20ms
+    std.Thread.sleep(20_000_000); // 20ms
 }
 
 test "memory: buffer reallocation stress" {
