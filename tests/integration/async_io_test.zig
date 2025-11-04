@@ -37,7 +37,7 @@ test "async io with structured logging" {
     const fields = [_]zlog.Field{
         .{ .key = "async_test", .value = .{ .boolean = true } },
         .{ .key = "thread_id", .value = .{ .uint = 12345 } },
-        .{ .key = "timestamp", .value = .{ .int = std.time.timestamp() } },
+        .{ .key = "timestamp", .value = .{ .int = (std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable).sec } },
     };
 
     logger.logWithFields(.info, "Async structured logging test", &fields);
@@ -57,7 +57,7 @@ test "async io high throughput" {
     });
     defer logger.deinit();
 
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     // Log many messages quickly
     var i: u32 = 0;
@@ -65,7 +65,7 @@ test "async io high throughput" {
         logger.info("High throughput test {d}", .{i});
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
 
     std.debug.print("Async throughput: 1000 messages in {d:.2}ms\n", .{duration_ms});

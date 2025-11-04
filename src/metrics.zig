@@ -5,6 +5,12 @@ const std = @import("std");
 const zlog = @import("root.zig");
 const build_options = @import("build_options");
 
+// Helper function for getting Unix timestamp (Zig 0.16+ compatibility)
+inline fn getUnixTimestamp() i64 {
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    return ts.sec;
+}
+
 /// Metric types for different measurements
 pub const MetricType = enum {
     counter, // Monotonically increasing value
@@ -26,24 +32,24 @@ pub const Metric = struct {
             .name = name,
             .metric_type = metric_type,
             .value = std.atomic.Value(u64).init(0),
-            .last_updated = std.atomic.Value(i64).init(std.time.timestamp()),
+            .last_updated = std.atomic.Value(i64).init(getUnixTimestamp()),
             .description = description,
         };
     }
 
     pub fn increment(self: *Metric) void {
         _ = self.value.fetchAdd(1, .monotonic);
-        self.last_updated.store(std.time.timestamp(), .monotonic);
+        self.last_updated.store(getUnixTimestamp(), .monotonic);
     }
 
     pub fn add(self: *Metric, amount: u64) void {
         _ = self.value.fetchAdd(amount, .monotonic);
-        self.last_updated.store(std.time.timestamp(), .monotonic);
+        self.last_updated.store(getUnixTimestamp(), .monotonic);
     }
 
     pub fn set(self: *Metric, value: u64) void {
         self.value.store(value, .monotonic);
-        self.last_updated.store(std.time.timestamp(), .monotonic);
+        self.last_updated.store(getUnixTimestamp(), .monotonic);
     }
 
     pub fn get(self: *const Metric) u64 {
@@ -177,7 +183,7 @@ pub const MetricsCollector = struct {
             .files_written = if (build_options.enable_file_targets) Metric.init("files_written", .counter, "Files written") else {},
             .network_sends = if (build_options.enable_network_targets) Metric.init("network_sends", .counter, "Network send operations") else {},
             .network_failures = if (build_options.enable_network_targets) Metric.init("network_failures", .counter, "Network send failures") else {},
-            .start_time = std.time.timestamp(),
+            .start_time = getUnixTimestamp(),
         };
     }
 
@@ -231,7 +237,7 @@ pub const MetricsCollector = struct {
     }
 
     pub fn getUptime(self: *const MetricsCollector) i64 {
-        return std.time.timestamp() - self.start_time;
+        return getUnixTimestamp() - self.start_time;
     }
 
     pub fn getThroughput(self: *const MetricsCollector) f64 {

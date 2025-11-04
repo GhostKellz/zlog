@@ -84,7 +84,7 @@ test "thread_safety: concurrent structured logging" {
                 const fields = [_]zlog.Field{
                     .{ .key = "thread_id", .value = .{ .uint = ctx.thread_id } },
                     .{ .key = "iteration", .value = .{ .uint = i } },
-                    .{ .key = "timestamp", .value = .{ .uint = @intCast(std.time.timestamp()) } },
+                    .{ .key = "timestamp", .value = .{ .uint = @intCast((std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable).sec) } },
                 };
                 ctx.logger_ptr.logWithFields(.info, "Structured concurrent test", &fields);
             }

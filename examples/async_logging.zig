@@ -24,14 +24,14 @@ pub fn main() !void {
         defer logger.deinit();
 
         const iterations = 50000;
-        const start = std.time.nanoTimestamp();
+        const start = (std.time.Timer.start() catch unreachable).read();
 
         var i: u32 = 0;
         while (i < iterations) : (i += 1) {
             logger.info("Synchronous log message {d}", .{i});
         }
 
-        const end = std.time.nanoTimestamp();
+        const end = (std.time.Timer.start() catch unreachable).read();
         const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
         const messages_per_second = @as(f64, @floatFromInt(iterations)) / (duration_ms / 1000.0);
 
@@ -54,14 +54,14 @@ pub fn main() !void {
         defer logger.deinit();
 
         const iterations = 50000;
-        const start = std.time.nanoTimestamp();
+        const start = (std.time.Timer.start() catch unreachable).read();
 
         var i: u32 = 0;
         while (i < iterations) : (i += 1) {
             logger.info("Asynchronous log message {d}", .{i});
         }
 
-        const end = std.time.nanoTimestamp();
+        const end = (std.time.Timer.start() catch unreachable).read();
         const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
         const messages_per_second = @as(f64, @floatFromInt(iterations)) / (duration_ms / 1000.0);
 

@@ -172,7 +172,7 @@ test "concurrent file access" {
 
         const fields = [_]zlog.Field{
             .{ .key = "iteration", .value = .{ .uint = i } },
-            .{ .key = "timestamp", .value = .{ .int = std.time.timestamp() } },
+            .{ .key = "timestamp", .value = .{ .int = (std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable).sec } },
         };
         logger.logWithFields(.debug, "Concurrent structured log", &fields);
     }

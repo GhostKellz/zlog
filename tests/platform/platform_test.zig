@@ -140,16 +140,17 @@ test "platform: timestamp consistency" {
     defer logger.deinit();
 
     // Test that timestamps work across platforms
-    const start_time = std.time.timestamp();
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const start_time = ts.sec;
 
     logger.info("Timestamp test start", .{});
 
     // Small delay to ensure different timestamp
-    std.Thread.sleep(1_000_000); // 1ms
+    std.time.sleep(1_000_000); // 1ms
 
     logger.info("Timestamp test end", .{});
 
-    const end_time = std.time.timestamp();
+    const end_time = (std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable).sec;
 
     // Verify time progressed
     try testing.expect(end_time >= start_time);
@@ -331,14 +332,14 @@ test "platform: performance characteristics" {
     defer logger.deinit();
 
     const iterations = 100;
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("Performance test {d}", .{i});
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = std.time.nanoTimestamp() catch unreachable;
     const duration_ns = end - start;
     const duration_ms = @as(f64, @floatFromInt(duration_ns)) / 1_000_000.0;
     const messages_per_ms = @as(f64, @floatFromInt(iterations)) / duration_ms;

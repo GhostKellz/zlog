@@ -153,9 +153,10 @@ test "concurrent logging safety" {
     while (i < 10) : (i += 1) {
         logger.info("Concurrent test message {d}", .{i});
 
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
         const fields = [_]zlog.Field{
             .{ .key = "thread_id", .value = .{ .uint = i } },
-            .{ .key = "timestamp", .value = .{ .int = std.time.timestamp() } },
+            .{ .key = "timestamp", .value = .{ .int = ts.sec } },
         };
         logger.logWithFields(.debug, "Concurrent structured message", &fields);
     }

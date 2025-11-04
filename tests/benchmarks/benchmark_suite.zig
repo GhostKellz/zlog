@@ -32,14 +32,14 @@ pub fn benchmarkTextFormat(allocator: std.mem.Allocator, iterations: u32) !Bench
     defer logger.deinit();
 
     const message = "Benchmark test message with moderate length and some structure";
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("{s} {d}", .{ message, i });
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const total_time = end - start;
     const seconds = @as(f64, @floatFromInt(total_time)) / 1_000_000_000.0;
     const messages_per_sec = @as(f64, @floatFromInt(iterations)) / seconds;
@@ -79,14 +79,14 @@ pub fn benchmarkJsonFormat(allocator: std.mem.Allocator, iterations: u32) !Bench
     defer logger.deinit();
 
     const message = "Benchmark test message with moderate length";
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("{s} {d}", .{ message, i });
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const total_time = end - start;
     const seconds = @as(f64, @floatFromInt(total_time)) / 1_000_000_000.0;
     const messages_per_sec = @as(f64, @floatFromInt(iterations)) / seconds;
@@ -125,14 +125,14 @@ pub fn benchmarkBinaryFormat(allocator: std.mem.Allocator, iterations: u32) !Ben
     defer logger.deinit();
 
     const message = "Benchmark test message with moderate length";
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("{s} {d}", .{ message, i });
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const total_time = end - start;
     const seconds = @as(f64, @floatFromInt(total_time)) / 1_000_000_000.0;
     const messages_per_sec = @as(f64, @floatFromInt(iterations)) / seconds;
@@ -166,14 +166,14 @@ pub fn benchmarkStructuredLogging(allocator: std.mem.Allocator, iterations: u32)
         .{ .key = "latency", .value = .{ .float = 15.7 } },
     };
 
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.logWithFields(.info, "Structured benchmark message", &fields);
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const total_time = end - start;
     const seconds = @as(f64, @floatFromInt(total_time)) / 1_000_000_000.0;
     const messages_per_sec = @as(f64, @floatFromInt(iterations)) / seconds;
@@ -213,14 +213,14 @@ pub fn benchmarkAsyncLogging(allocator: std.mem.Allocator, iterations: u32) !Ben
     defer logger.deinit();
 
     const message = "Async benchmark test message";
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("{s} {d}", .{ message, i });
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
 
     // Give time for async processing
     std.time.sleep(50_000_000); // 50ms
@@ -253,14 +253,14 @@ pub fn benchmarkSampledLogging(allocator: std.mem.Allocator, iterations: u32) !B
     defer logger.deinit();
 
     const message = "Sampled benchmark test message";
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("{s} {d}", .{ message, i });
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const total_time = end - start;
     const seconds = @as(f64, @floatFromInt(total_time)) / 1_000_000_000.0;
     const messages_per_sec = @as(f64, @floatFromInt(iterations)) / seconds;

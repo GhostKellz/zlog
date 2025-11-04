@@ -36,14 +36,14 @@ pub fn benchmarkZlog(allocator: std.mem.Allocator) !ComparisonResult {
     });
     defer logger.deinit();
 
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("Benchmark message {d} with moderate content for realistic testing", .{i});
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const duration_s = @as(f64, @floatFromInt(end - start)) / 1_000_000_000.0;
     const messages_per_sec = @as(f64, @floatFromInt(iterations)) / duration_s;
 
@@ -226,17 +226,17 @@ pub fn benchmarkStructuredLogging(allocator: std.mem.Allocator) !ComparisonResul
         .{ .key = "action", .value = .{ .string = "benchmark" } },
         .{ .key = "success", .value = .{ .boolean = true } },
         .{ .key = "latency_ms", .value = .{ .float = 15.7 } },
-        .{ .key = "timestamp", .value = .{ .int = std.time.timestamp() } },
+        .{ .key = "timestamp", .value = .{ .int = (std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable).sec } },
     };
 
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.logWithFields(.info, "Structured benchmark test", &fields);
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const duration_s = @as(f64, @floatFromInt(end - start)) / 1_000_000_000.0;
     const messages_per_sec = @as(f64, @floatFromInt(iterations)) / duration_s;
 

@@ -171,7 +171,7 @@ pub const LogContext = struct {
     }
 
     pub fn withTiming(self: *LogContext, start_time: i64) !*LogContext {
-        const now = std.time.nanoTimestamp();
+        const now = (std.time.Timer.start() catch unreachable).read();
         const duration = @as(f64, @floatFromInt(now - start_time)) / 1_000_000.0; // Convert to ms
         try self.add(CommonFields.duration(duration));
         return self;
@@ -230,7 +230,7 @@ pub const ScopedLogger = struct {
             .logger = logger,
             .context = context,
             .scope_name = scope_name,
-            .start_time = std.time.nanoTimestamp(),
+            .start_time = (std.time.Timer.start() catch unreachable).read(),
         };
 
         // Log scope entry
@@ -241,7 +241,7 @@ pub const ScopedLogger = struct {
 
     pub fn deinit(self: *ScopedLogger) void {
         // Log scope exit with timing
-        const now = std.time.nanoTimestamp();
+        const now = (std.time.Timer.start() catch unreachable).read();
         const duration = @as(f64, @floatFromInt(now - self.start_time)) / 1_000_000.0;
 
         // Create exit context with duration
@@ -287,11 +287,11 @@ pub const PerfLogger = struct {
         comptime func: anytype,
         args: anytype,
     ) !@TypeOf(@call(.auto, func, args)) {
-        const start = std.time.nanoTimestamp();
+        const start = (std.time.Timer.start() catch unreachable).read();
 
         const result = try @call(.auto, func, args);
 
-        const end = std.time.nanoTimestamp();
+        const end = (std.time.Timer.start() catch unreachable).read();
         const duration = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
 
         var context = LogContext.init(allocator);

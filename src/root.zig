@@ -3,6 +3,12 @@ const build_options = @import("build_options");
 
 const zsync = if (build_options.enable_async) @import("zsync") else void;
 
+// Helper function for getting Unix timestamp (Zig 0.16+ compatibility)
+inline fn getUnixTimestamp() i64 {
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    return ts.sec;
+}
+
 // Public API exports for advanced features
 pub const network = if (build_options.enable_network_targets) @import("network.zig") else struct {};
 pub const configuration = @import("config.zig");
@@ -171,7 +177,7 @@ pub const Logger = struct {
             .sample_counter = std.atomic.Value(u64).init(0),
             .current_file_size = if (build_options.enable_file_targets) std.atomic.Value(usize).init(0) else {},
             .batch_buffer = if (build_options.enable_aggregation) .{} else {},
-            .last_batch_time = if (build_options.enable_aggregation) std.atomic.Value(i64).init(std.time.timestamp()) else {},
+            .last_batch_time = if (build_options.enable_aggregation) std.atomic.Value(i64).init(getUnixTimestamp()) else {},
             .dedup_cache = if (build_options.enable_aggregation) std.AutoHashMap(u64, i64).init(allocator) else {},
             .async_queue = if (build_options.enable_async) .{} else {},
             .async_thread = if (build_options.enable_async) null else {},
@@ -326,7 +332,7 @@ pub const Logger = struct {
 
         const entry = LogEntry{
             .level = level,
-            .timestamp = std.time.timestamp(),
+            .timestamp = getUnixTimestamp(),
             .message = message,
             .fields = fields,
         };
@@ -792,14 +798,14 @@ test "benchmark text format" {
     });
     defer logger.deinit();
 
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < 10000) : (i += 1) {
         logger.info("Benchmark message {d}", .{i});
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
     const messages_per_ms = 10000.0 / duration_ms;
 
@@ -816,14 +822,14 @@ test "benchmark binary format" {
     });
     defer logger.deinit();
 
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < 10000) : (i += 1) {
         logger.info("Benchmark message {d}", .{i});
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
     const messages_per_ms = 10000.0 / duration_ms;
 
@@ -845,14 +851,14 @@ test "benchmark structured logging" {
         .{ .key = "success", .value = .{ .boolean = true } },
     };
 
-    const start = std.time.nanoTimestamp();
+    const start = (std.time.Timer.start() catch unreachable).read();
 
     var i: u32 = 0;
     while (i < 5000) : (i += 1) {
         logger.logWithFields(.info, "Structured benchmark", &fields);
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = (std.time.Timer.start() catch unreachable).read();
     const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
     const messages_per_ms = 5000.0 / duration_ms;
 

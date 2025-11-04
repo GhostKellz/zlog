@@ -3,6 +3,12 @@
 
 const std = @import("std");
 
+// Helper function for getting Unix timestamp (Zig 0.16+ compatibility)
+inline fn getUnixTimestamp() i64 {
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    return ts.sec;
+}
+
 // Main error union for all zlog operations
 pub const ZlogError = error{
     // Configuration errors
@@ -131,7 +137,7 @@ pub const ErrorContext = struct {
                 .line = line,
                 .file = file,
             },
-            .timestamp = std.time.timestamp(),
+            .timestamp = getUnixTimestamp(),
         };
     }
 
@@ -340,7 +346,7 @@ pub const ErrorStats = struct {
     pub fn getErrorRate(self: ErrorStats) f64 {
         if (self.first_error_time == null) return 0.0;
 
-        const duration = std.time.timestamp() - self.first_error_time.?;
+        const duration = getUnixTimestamp() - self.first_error_time.?;
         if (duration <= 0) return 0.0;
 
         return @as(f64, @floatFromInt(self.total_errors)) / @as(f64, @floatFromInt(duration));
