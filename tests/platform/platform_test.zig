@@ -146,7 +146,7 @@ test "platform: timestamp consistency" {
     logger.info("Timestamp test start", .{});
 
     // Small delay to ensure different timestamp
-    std.time.sleep(1_000_000); // 1ms
+    std.Io.sleep(std.testing.io, std.Io.Duration.fromNanoseconds(1_000_000), .awake) catch {};
 
     logger.info("Timestamp test end", .{});
 
@@ -332,15 +332,14 @@ test "platform: performance characteristics" {
     defer logger.deinit();
 
     const iterations = 100;
-    const start = (std.time.Timer.start() catch unreachable).read();
+    var timer = std.time.Timer.start() catch unreachable;
 
     var i: u32 = 0;
     while (i < iterations) : (i += 1) {
         logger.info("Performance test {d}", .{i});
     }
 
-    const end = std.time.nanoTimestamp() catch unreachable;
-    const duration_ns = end - start;
+    const duration_ns = timer.read();
     const duration_ms = @as(f64, @floatFromInt(duration_ns)) / 1_000_000.0;
     const messages_per_ms = @as(f64, @floatFromInt(iterations)) / duration_ms;
 

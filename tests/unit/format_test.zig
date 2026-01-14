@@ -162,13 +162,12 @@ test "format performance comparison" {
         });
         defer logger.deinit();
 
-        const start = (std.time.Timer.start() catch unreachable).read();
+        var timer = std.time.Timer.start() catch unreachable;
         var i: u32 = 0;
         while (i < iterations) : (i += 1) {
             logger.info("Performance test message {d}", .{i});
         }
-        const end = (std.time.Timer.start() catch unreachable).read();
-        const text_duration = end - start;
+        const text_duration = timer.read();
         std.debug.print("Text format: {d} messages in {d}ns\n", .{ iterations, text_duration });
     }
 
@@ -180,13 +179,12 @@ test "format performance comparison" {
         });
         defer logger.deinit();
 
-        const start = (std.time.Timer.start() catch unreachable).read();
+        var timer = std.time.Timer.start() catch unreachable;
         var i: u32 = 0;
         while (i < iterations) : (i += 1) {
             logger.info("Performance test message {d}", .{i});
         }
-        const end = (std.time.Timer.start() catch unreachable).read();
-        const json_duration = end - start;
+        const json_duration = timer.read();
         std.debug.print("JSON format: {d} messages in {d}ns\n", .{ iterations, json_duration });
     }
 
@@ -198,13 +196,12 @@ test "format performance comparison" {
         });
         defer logger.deinit();
 
-        const start = (std.time.Timer.start() catch unreachable).read();
+        var timer = std.time.Timer.start() catch unreachable;
         var i: u32 = 0;
         while (i < iterations) : (i += 1) {
             logger.info("Performance test message {d}", .{i});
         }
-        const end = (std.time.Timer.start() catch unreachable).read();
-        const binary_duration = end - start;
+        const binary_duration = timer.read();
         std.debug.print("Binary format: {d} messages in {d}ns\n", .{ iterations, binary_duration });
     }
 }

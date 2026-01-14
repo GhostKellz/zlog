@@ -112,7 +112,7 @@ test "property: configuration validation is consistent" {
     }
 
     // Clean up any test files
-    std.fs.cwd().deleteFile("/tmp/property_test.log") catch {};
+    std.Io.Dir.cwd().deleteFile(std.Options.debug_io, "/tmp/property_test.log") catch {};
 }
 
 test "property: sampling rate always affects message frequency" {

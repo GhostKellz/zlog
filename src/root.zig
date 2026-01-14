@@ -134,7 +134,8 @@ pub const LoggerConfig = struct {
 
 pub const Logger = struct {
     config: LoggerConfig,
-    file: std.fs.File,
+    file: std.Io.File,
+    io: std.Io,
     mutex: std.Thread.Mutex,
     allocator: std.mem.Allocator,
     buffer: std.ArrayList(u8),
@@ -157,20 +158,24 @@ pub const Logger = struct {
         // Validate configuration with helpful error messages
         try config.validate();
 
+        // Get Io instance for file operations
+        const io = std.Options.debug_io;
+
         // Open output file
         const output_file = switch (config.output_target) {
-            .stdout => std.fs.File.stdout(),
-            .stderr => std.fs.File.stderr(),
+            .stdout => std.Io.File.stdout(),
+            .stderr => std.Io.File.stderr(),
             .file => if (build_options.enable_file_targets) blk: {
                 const path = config.file_path.?;
-                break :blk try std.fs.cwd().createFile(path, .{ .read = false, .truncate = false });
-            } else std.fs.File.stdout(),
-            .network => std.fs.File.stdout(), // Network targets don't use a file handle
+                break :blk try std.Io.Dir.cwd().createFile(io, path, .{});
+            } else std.Io.File.stdout(),
+            .network => std.Io.File.stdout(), // Network targets don't use a file handle
         };
 
         var logger = Logger{
             .config = config,
             .file = output_file,
+            .io = io,
             .mutex = .{},
             .allocator = allocator,
             .buffer = try std.ArrayList(u8).initCapacity(allocator, config.buffer_size),
@@ -186,7 +191,8 @@ pub const Logger = struct {
 
         // Get current file size for rotation tracking
         if (build_options.enable_file_targets and config.output_target == .file) {
-            const file_size = logger.file.getEndPos() catch 0;
+            const stat = logger.file.stat(io) catch null;
+            const file_size = if (stat) |s| s.size else 0;
             logger.current_file_size.store(file_size, .monotonic);
         }
 
@@ -216,9 +222,9 @@ pub const Logger = struct {
         // Close file if it's not stdout/stderr
         if (build_options.enable_file_targets and
             self.config.output_target == .file and
-            self.file.handle != std.fs.File.stdout().handle and
-            self.file.handle != std.fs.File.stderr().handle) {
-            self.file.close();
+            self.file.handle != std.Io.File.stdout().handle and
+            self.file.handle != std.Io.File.stderr().handle) {
+            self.file.close(self.io);
         }
 
         self.buffer.deinit(self.allocator);
@@ -232,7 +238,7 @@ pub const Logger = struct {
         const file_path = self.config.file_path.?;
 
         // Close current file
-        self.file.close();
+        self.file.close(self.io);
 
         // Rotate backup files
         var i = self.config.max_backup_files;
@@ -243,16 +249,16 @@ pub const Logger = struct {
             const new_backup = try std.fmt.allocPrint(self.allocator, "{s}.{d}", .{ file_path, i });
             defer self.allocator.free(new_backup);
 
-            std.fs.cwd().rename(old_backup, new_backup) catch {};
+            std.Io.Dir.cwd().rename(self.io, old_backup, new_backup) catch {};
         }
 
         // Move current log to .0 backup
         const backup_name = try std.fmt.allocPrint(self.allocator, "{s}.0", .{file_path});
         defer self.allocator.free(backup_name);
-        std.fs.cwd().rename(file_path, backup_name) catch {};
+        std.Io.Dir.cwd().rename(self.io, file_path, backup_name) catch {};
 
         // Create new log file
-        self.file = try std.fs.cwd().createFile(file_path, .{ .read = false, .truncate = true });
+        self.file = try std.Io.Dir.cwd().createFile(self.io, file_path, .{ .truncate = true });
         self.current_file_size.store(0, .monotonic);
     }
 
@@ -273,7 +279,7 @@ pub const Logger = struct {
                 // Reserve capacity in batch buffer
                 batch_buffer.ensureTotalCapacityPrecise(self.allocator, queue_size) catch {
                     self.mutex.unlock();
-                    std.Thread.sleep(500000); // 0.5ms - shorter sleep for better responsiveness
+                    std.Io.sleep(self.io, std.Io.Duration.fromNanoseconds(500000), .awake) catch {}; // 0.5ms - shorter sleep for better responsiveness
                     continue;
                 };
 
@@ -289,20 +295,20 @@ pub const Logger = struct {
             if (batch_buffer.items.len > 0) {
                 // Write all messages as efficiently as possible
                 for (batch_buffer.items) |msg| {
-                    _ = self.file.writeAll(msg) catch {};
+                    self.file.writeStreamingAll(self.io, msg) catch {};
                     self.allocator.free(msg);
                 }
                 batch_buffer.clearRetainingCapacity();
             } else {
                 // Adaptive sleep - shorter when active, longer when idle
-                std.Thread.sleep(500000); // 0.5ms - more responsive than 1ms
+                std.Io.sleep(self.io, std.Io.Duration.fromNanoseconds(500000), .awake) catch {}; // 0.5ms - more responsive than 1ms
             }
         }
 
         // Process any remaining messages during shutdown
         self.mutex.lock();
         for (self.async_queue.items) |msg| {
-            _ = self.file.writeAll(msg) catch {};
+            self.file.writeStreamingAll(self.io, msg) catch {};
             self.allocator.free(msg);
         }
         self.async_queue.clearAndFree(self.allocator);
@@ -648,7 +654,7 @@ pub const Logger = struct {
 
     fn flush(self: *Logger) !void {
         if (self.buffer.items.len > 0) {
-            _ = try self.file.writeAll(self.buffer.items);
+            try self.file.writeStreamingAll(self.io, self.buffer.items);
 
             // Track file size for rotation
             if (build_options.enable_file_targets and self.config.output_target == .file) {
@@ -798,15 +804,15 @@ test "benchmark text format" {
     });
     defer logger.deinit();
 
-    const start = (std.time.Timer.start() catch unreachable).read();
+    var timer = std.time.Timer.start() catch unreachable;
 
     var i: u32 = 0;
     while (i < 10000) : (i += 1) {
         logger.info("Benchmark message {d}", .{i});
     }
 
-    const end = (std.time.Timer.start() catch unreachable).read();
-    const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
+    const duration_ns = timer.read();
+    const duration_ms = @as(f64, @floatFromInt(duration_ns)) / 1_000_000.0;
     const messages_per_ms = 10000.0 / duration_ms;
 
     std.debug.print("Text format: {d:.2} messages/ms\n", .{messages_per_ms});
@@ -822,15 +828,15 @@ test "benchmark binary format" {
     });
     defer logger.deinit();
 
-    const start = (std.time.Timer.start() catch unreachable).read();
+    var timer = std.time.Timer.start() catch unreachable;
 
     var i: u32 = 0;
     while (i < 10000) : (i += 1) {
         logger.info("Benchmark message {d}", .{i});
     }
 
-    const end = (std.time.Timer.start() catch unreachable).read();
-    const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
+    const duration_ns = timer.read();
+    const duration_ms = @as(f64, @floatFromInt(duration_ns)) / 1_000_000.0;
     const messages_per_ms = 10000.0 / duration_ms;
 
     std.debug.print("Binary format: {d:.2} messages/ms\n", .{messages_per_ms});
@@ -851,15 +857,15 @@ test "benchmark structured logging" {
         .{ .key = "success", .value = .{ .boolean = true } },
     };
 
-    const start = (std.time.Timer.start() catch unreachable).read();
+    var timer = std.time.Timer.start() catch unreachable;
 
     var i: u32 = 0;
     while (i < 5000) : (i += 1) {
         logger.logWithFields(.info, "Structured benchmark", &fields);
     }
 
-    const end = (std.time.Timer.start() catch unreachable).read();
-    const duration_ms = @as(f64, @floatFromInt(end - start)) / 1_000_000.0;
+    const duration_ns = timer.read();
+    const duration_ms = @as(f64, @floatFromInt(duration_ns)) / 1_000_000.0;
     const messages_per_ms = 5000.0 / duration_ms;
 
     std.debug.print("Structured logging: {d:.2} messages/ms\n", .{messages_per_ms});
